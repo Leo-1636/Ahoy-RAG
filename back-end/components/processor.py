@@ -23,12 +23,12 @@ class DocumentProcessor:
 
     def initialize(self):
         self.document.path = PATH.DOCUMENTS / self.document.id
-        self.document.page_number = pdf_io.get_page_number(PATH.ORIGINALS / f"{self.document.id}.pdf")
+        self.document.page_number = pdf_io.get_page_number(self.document.path / "original.pdf")
         
+    def build(self):
         for sub_folder in ["", "pages", "images"]:
             system.make_folder(self.document.path / sub_folder)
         system.move_file(PATH.ORIGINALS / f"{self.document.id}.pdf", self.document.path / "original.pdf")
-        return self
 
     def convert_images(self):
         pdf_io.convert_images(
@@ -70,7 +70,6 @@ class DocumentProcessor:
         self.annotations.append(
             image_io.draw_annotation(page = self.page, elements = elements)
         )
-        self.save_annotation_pdf()
 
     def load_page(self, page_id: int):
         self.page_id = page_id
@@ -80,7 +79,7 @@ class DocumentProcessor:
     def load_pages(self, start_id: int, end_id: int):
         return [
             self.load_page(page_id)
-            for page_id in range(start_id, min(end_id, self.document.page_number))
+            for page_id in range(start_id, min(end_id, self.document.page_number + 1))
         ]
     
     def load_image(self, content: dict):
@@ -215,7 +214,7 @@ class DatabaseProcessor:
     def load_pages(self, start_id: int, end_id: int):
         return [
             self.load_page(page_id)
-            for page_id in range(start_id, min(end_id, self.document.page_number))
+            for page_id in range(start_id, min(end_id, self.document.page_number + 1))
         ]
 
     def load_content_list(self):

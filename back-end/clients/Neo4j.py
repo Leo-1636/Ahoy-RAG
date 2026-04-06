@@ -1,4 +1,6 @@
-from neo4j import AsyncGraphDatabase
+import asyncio
+
+from neo4j import GraphDatabase
 from neo4j_graphrag.experimental.components.kg_writer import Neo4jWriter
 from neo4j_graphrag.experimental.components.types import Neo4jGraph
 from neo4j_graphrag.indexes import create_vector_index
@@ -7,25 +9,26 @@ from config import Neo4j
 
 class ChatNeo4j:
     def __init__(self):
-        self.driver = AsyncGraphDatabase.driver(
-            url = Neo4j.BASE_URL,
+        self.driver = GraphDatabase.driver(
+            uri = Neo4j.BASE_URL,
             auth = Neo4j.AUTH,
         )
-        self.database = neo4j.document
+        self.database = Neo4j.DOCUMENT
 
     async def write_graph(self, nodes: list, relationships: list):
-        with self.driver as driver:
-            graph = Neo4jGraph(
-                nodes = nodes, 
-                relationships = relationships
-            )
-            writer = Neo4jWriter(
-                driver = driver,
-                neo4j_database = Neo4j.DOCUMENT,
-            ).run(graph)
-            await writer
+        graph = Neo4jGraph(
+            nodes = nodes,
+            relationships = relationships
+        )
+        await Neo4jWriter(
+            driver = self.driver,
+            neo4j_database = Neo4j.DOCUMENT,
+        ).run(graph)
             
     async def create_index(self):
+        await asyncio.to_thread(self._create_index)
+
+    def _create_index(self):
         create_vector_index(
             driver = self.driver,
             name = Neo4j.TEXT_INDEX,
@@ -45,5 +48,5 @@ class ChatNeo4j:
             neo4j_database = Neo4j.DOCUMENT,
         )
 
-    def close(self):
-        self.driver.close()
+    async def close(self):
+        await asyncio.to_thread(self.driver.close)

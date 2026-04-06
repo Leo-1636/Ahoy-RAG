@@ -29,6 +29,7 @@ async def Document_Init(state: ParserState, writer: StreamWriter) -> ParserState
         writer(f"Initializing document {document.id}")
         print(f"Initializing document {document.id}")
         try:
+            processor.build()
             processor.initialize()
             await asyncio.to_thread(processor.convert_images)
         except Exception as e:
@@ -53,7 +54,7 @@ async def Document_Summary(state: ParserState, writer: StreamWriter) -> ParserSt
         try:
             message = Message()
             message.add_system(document_summary_instruction)
-            message.add_image(processor.load_pages(1, 6))
+            message.add_image(processor.load_pages(1, 5))
 
             summary = await client.async_chat(message.prompts)
             processor.add_summary(summary)
@@ -72,7 +73,8 @@ async def Document_Analyze(state: ParserState, writer: StreamWriter) -> ParserSt
 
     for index, document in enumerate(state.documents):
         processor = DocumentProcessor(document)
-
+        processor.initialize()
+        
         tracker = ProgressTracker()
         document_progress = f"document {index + 1}/{len(state.documents)}"
         for batch_index in range(1, document.page_number + 1, client.batch_size):
@@ -89,12 +91,12 @@ async def Document_Analyze(state: ParserState, writer: StreamWriter) -> ParserSt
 
         tracker.reset()
         for page_id, detection in enumerate(processor.detections):
-            tracker.update(page_id, document.page_number)
+            tracker.update(page_id + 1, document.page_number)
             writer(f"Analyzing page {tracker.current}/{tracker.total} of {document_progress} : {tracker.progress}")
             print(f"Analyzing page {tracker.current}/{tracker.total} of {document_progress} : {tracker.progress}")
             try:
                 algorithm = ReadingOrderAlgorithm(detection, client.classes)
-                processor.load_page(page_id)
+                processor.load_page(page_id + 1)
                 processor.add_contents(algorithm.reading_order)
                 processor.add_annotation(algorithm.reading_order)
             except Exception as e:
@@ -240,9 +242,9 @@ async def Vector_Embedding(state: ParserState, writer: StreamWriter) -> ParserSt
             try:
                 batch_image = processor.load_pages(batch_index, batch_index + client.batch_size)
                 batch_vector = await asyncio.to_thread(client.encode_image, batch_image)
-                for page_index in range(client.batch_size):
+                for page_index, vector in enumerate(batch_vector):
                     page_id = batch_index + page_index
-                    processor.embed_page(page_id, batch_vector[page_index])
+                    processor.embed_page(page_id, vector)
             except Exception as e:
                 writer(f"Failed to embed page {tracker.current}/{tracker.total} of {document_progress} : {e}")
                 print(f"Failed to embed page {tracker.current}/{tracker.total} of {document_progress} : {e}")
@@ -258,9 +260,9 @@ async def Vector_Embedding(state: ParserState, writer: StreamWriter) -> ParserSt
                 batch_image = processor.load_image(batch_index, client.batch_size)
                 batch_text_vector = await asyncio.to_thread(client.encode_text, batch_text)
                 batch_image_vector = await asyncio.to_thread(client.encode_image, batch_image)
-                for content_index in range(client.batch_size):
+                for content_index, text_vector, image_vector in zip(range(batch_text_vector), batch_text_vector, batch_image_vector):
                     content_id = batch_index + content_index
-                    processor.embed_content(content_id, batch_text_vector[content_index], batch_image_vector[content_index])
+                    processor.embed_content(content_id, text_vector, image_vector)
             except Exception as e:
                 writer(f"Failed to embed content {tracker.current}/{tracker.total} of {document_progress} : {e}")
                 print(f"Failed to embed content {tracker.current}/{tracker.total} of {document_progress} : {e}")
@@ -288,7 +290,7 @@ async def Database_Storage(state: ParserState, writer: StreamWriter) -> ParserSt
             writer(f"Failed to store database of {document.id} : {e}")
             print(f"Failed to store database of {document.id} : {e}")
             continue
-    database.close()
+    await database.close()
     return ParserState(mode = state.mode, documents = state.documents)
 
 def Parser_Route(state: ParserState):
@@ -322,6 +324,8 @@ workflow = (
             "Fast to Deep Parse": "Document_Analyze",
         }
     )
+    .add_edge("Document_Analyze", "Document_Extract")
+    .add_edge("Document_Extract", "Database_Init")
     .add_edge("Database_Init", "Relation_Analyze")
     .add_edge("Relation_Analyze", "Vector_Embedding")
     .add_edge("Vector_Embedding", "Database_Storage")

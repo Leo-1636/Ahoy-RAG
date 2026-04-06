@@ -74,7 +74,7 @@ class ReadingOrderAlgorithm:
         for i in range(len(interval_bounds) - 1):
             group_range = interval_bounds[i], interval_bounds[i + 1]
             group = [
-                element for element in self.elements 
+                element for element in elements
                 if group_range[0] <= (element[axis] + element[axis + 2]) / 2 < group_range[1]
             ]
             if group:

@@ -14,7 +14,7 @@ class MODEL:
     gpt5_mini = "gpt-5-mini-2025-08-07"
 
 class Neo4j: # 修改命名
-    AUTH = ("neo4j", "password")
+    AUTH = ("neo4j", "ntousena")
     BASE_URL = "neo4j://127.0.0.1:7687"
 
     TEXT_INDEX = "text_index"
@@ -22,7 +22,7 @@ class Neo4j: # 修改命名
 
     ACCOUNT = "account"
     MESSAGE = "message"
-    DOCUMENT = "document"
+    DOCUMENT = "test"
 
 class Ollama:
     API_KEY = "ollama"
