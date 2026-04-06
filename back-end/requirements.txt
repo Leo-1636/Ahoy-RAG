@@ -1,0 +1,19 @@
+fastapi
+langchain
+langchain-community
+langchain-core
+langchain-openai
+langgraph
+neo4j
+neo4j-graphrag
+numpy
+peft
+Pillow
+python-multipart
+sentence-transformers
+torch --index-url https://download.pytorch.org/whl/cu129
+torchvision --index-url https://download.pytorch.org/whl/cu129
+transformers
+trl
+ultralytics
+uvicorn
