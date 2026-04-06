@@ -25,9 +25,9 @@ class DocumentProcessor:
         self.document.path = PATH.DOCUMENTS / self.document.id
         self.document.page_number = pdf_io.get_page_number(PATH.ORIGINALS / f"{self.document.id}.pdf")
         
-        system.move_file(PATH.ORIGINALS / f"{self.document.id}.pdf", self.document.path / "original.pdf")
         for sub_folder in ["", "pages", "images"]:
             system.make_folder(self.document.path / sub_folder)
+        system.move_file(PATH.ORIGINALS / f"{self.document.id}.pdf", self.document.path / "original.pdf")
         return self
 
     def convert_images(self):
