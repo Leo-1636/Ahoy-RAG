@@ -22,19 +22,19 @@ from settings.prompts import (
     document_hierarchy_schema, document_hierarchy_instruction,
 )
 
-async def Document_Init(state: ParserState, streamer: StreamWriter) -> ParserState:
+async def Document_Init(state: ParserState, writer: StreamWriter) -> ParserState:
     for document in state.documents:
         processor = DocumentProcessor(document)
 
-        streamer(f"Initializing document {document.id}")
+        writer(f"Initializing document {document.id}")
         try:
             processor.initialize()
             await asyncio.to_thread(processor.convert_images)
         except Exception as e:
-            streamer(f"Failed to initialize document {document.id} : {e}")
+            writer(f"Failed to initialize document {document.id} : {e}")
     return ParserState(mode = state.mode, documents = state.documents)
 
-async def Document_Summary(state: ParserState, streamer: StreamWriter) -> ParserState:
+async def Document_Summary(state: ParserState, writer: StreamWriter) -> ParserState:
     client = ChatVLLM(
         model_name = MODEL.reasoning_model,
         temperature = 1.0,
@@ -46,7 +46,7 @@ async def Document_Summary(state: ParserState, streamer: StreamWriter) -> Parser
         tracker = ProgressTracker()
 
         tracker.update(index + 1, len(state.documents))
-        streamer(f"Summarizing document {tracker.current}/{tracker.total} : {tracker.progress}")
+        writer(f"Summarizing document {tracker.current}/{tracker.total} : {tracker.progress}")
         try:
             message = Message()
             message.add_system(document_summary_instruction)
@@ -55,15 +55,15 @@ async def Document_Summary(state: ParserState, streamer: StreamWriter) -> Parser
             summary = await client.async_chat(message.prompts)
             processor.add_summary(summary)
         except Exception as e:
-            streamer(f"Failed to summarize document {tracker.current}/{tracker.total} : {e}")
+            writer(f"Failed to summarize document {tracker.current}/{tracker.total} : {e}")
             continue
     client.sleep()
     return ParserState(mode = state.mode, documents = state.documents)
 
-async def Document_Filter(state: ParserState, streamer: StreamWriter) -> ParserState:
+async def Document_Filter(state: ParserState, writer: StreamWriter) -> ParserState:
     return ParserState(mode = state.mode, documents = state.documents)
 
-async def Document_Analyze(state: ParserState, streamer: StreamWriter) -> ParserState:
+async def Document_Analyze(state: ParserState, writer: StreamWriter) -> ParserState:
     client = ChatYOLO(model = "model.pt", batch_size = 16)
 
     for index, document in enumerate(state.documents):
@@ -73,31 +73,31 @@ async def Document_Analyze(state: ParserState, streamer: StreamWriter) -> Parser
         document_progress = f"document {index + 1}/{len(state.documents)}"
         for batch_index in range(1, document.page_number + 1, client.batch_size):
             tracker.update(batch_index, document.page_number)
-            streamer(f"Detecting page {tracker.current}/{tracker.total} of {document_progress} : {tracker.progress}")
+            writer(f"Detecting page {tracker.current}/{tracker.total} of {document_progress} : {tracker.progress}")
             try:
                 results = await client.detect_batch(processor.load_pages(batch_index, batch_index + client.batch_size))
                 processor.add_detection(results)
             except Exception as e:
-                streamer(f"Failed to detect page {batch_index}/{document.page_number} of {document_progress} : {e}")
+                writer(f"Failed to detect page {batch_index}/{document.page_number} of {document_progress} : {e}")
                 continue
 
         tracker.reset()
         for page_id, detection in enumerate(processor.detections):
             tracker.update(page_id, document.page_number)
-            streamer(f"Analyzing page {tracker.current}/{tracker.total} of {document_progress} : {tracker.progress}")
+            writer(f"Analyzing page {tracker.current}/{tracker.total} of {document_progress} : {tracker.progress}")
             try:
                 algorithm = ReadingOrderAlgorithm(detection, client.classes)
                 processor.load_page(page_id)
                 processor.add_contents(algorithm.reading_order)
                 processor.add_annotation(algorithm.reading_order)
             except Exception as e:
-                streamer(f"Failed to analyze page {tracker.current}/{tracker.total} of {document_progress} : {e}")
+                writer(f"Failed to analyze page {tracker.current}/{tracker.total} of {document_progress} : {e}")
                 continue
         processor.save_content_list()
         processor.save_annotation_pdf()
     return ParserState(mode = state.mode, documents = state.documents)
 
-async def Document_Extract(state: ParserState, streamer: StreamWriter) -> ParserState:
+async def Document_Extract(state: ParserState, writer: StreamWriter) -> ParserState:
     client = ChatVLLM(
         model_name = MODEL.reasoning_model,
         temperature = 1.0,
@@ -115,7 +115,7 @@ async def Document_Extract(state: ParserState, streamer: StreamWriter) -> Parser
         document_progress = f"document {index + 1}/{len(state.documents)}"
         for batch_index in range(0, len(processor.content_list), client.batch_size):
             tracker.update(batch_index + 1, len(processor.content_list))
-            streamer(f"Extracting content {tracker.current}/{tracker.total} of {document_progress} : {tracker.progress}")
+            writer(f"Extracting content {tracker.current}/{tracker.total} of {document_progress} : {tracker.progress}")
             try:
                 batch_message = MessageBatch()
                 batch_content = processor.content_list[batch_index : batch_index + client.batch_size]
@@ -129,16 +129,16 @@ async def Document_Extract(state: ParserState, streamer: StreamWriter) -> Parser
                     processor.update_content(batch_index + content_index, batch_responses[content_index])
             
             except Exception as e:
-                streamer(f"Failed to extract content {tracker.current}/{tracker.total} of {document_progress} : {e}")
+                writer(f"Failed to extract content {tracker.current}/{tracker.total} of {document_progress} : {e}")
                 for retry_index, content in enumerate(batch_content):
                     tracker.update(batch_index + retry_index + 1, len(processor.content_list))
-                    streamer(f"Retry Extracting content {tracker.current}/{tracker.total} of {document_progress} : {tracker.progress}")
+                    writer(f"Retry Extracting content {tracker.current}/{tracker.total} of {document_progress} : {tracker.progress}")
                     try:
                         message = batch_message.messages[retry_index]
                         response = await client.async_chat(message)
                         processor.update_content(batch_index + retry_index, response)
                     except Exception as e:
-                        streamer(f"Failed to retry extract content {tracker.current}/{tracker.total} of {document_progress} : {e}")
+                        writer(f"Failed to retry extract content {tracker.current}/{tracker.total} of {document_progress} : {e}")
                         continue
                 continue
             processor.save_content_list()
@@ -146,24 +146,24 @@ async def Document_Extract(state: ParserState, streamer: StreamWriter) -> Parser
     client.sleep()
     return ParserState(mode = state.mode, documents = state.documents)
 
-async def Database_Init(state: ParserState, streamer: StreamWriter) -> ParserState:
+async def Database_Init(state: ParserState, writer: StreamWriter) -> ParserState:
     for index, document in enumerate(state.documents):
         processor = DatabaseProcessor(document)
         document_progress = f"document {index + 1}/{len(state.documents)}"
         try:
-            streamer(f"Initializing database of {document_progress}")
+            writer(f"Initializing database of {document_progress}")
             processor.create_main_node()
             for page_id in range(1, document.page_number + 1):
                 processor.create_page_node(page_id)
             processor.link_pages()
         except Exception as e:
-            streamer(f"Failed to initialize database of {document_progress} : {e}")
+            writer(f"Failed to initialize database of {document_progress} : {e}")
             continue
         processor.save_pages()
         processor.save_relationships()
     return ParserState(mode = state.mode, documents = state.documents)
 
-async def Relation_Analyze(state: ParserState, streamer: StreamWriter) -> ParserState:
+async def Relation_Analyze(state: ParserState, writer: StreamWriter) -> ParserState:
     client = ChatVLLM(
         model_name = MODEL.reasoning_model,
         temperature = 1.0,
@@ -179,7 +179,7 @@ async def Relation_Analyze(state: ParserState, streamer: StreamWriter) -> Parser
         document_progress = f"document {index + 1} of {len(state.documents)}"
         for content_index, content in enumerate(processor.content_list):
             tracker.update(content_index + 1, len(processor.content_list))
-            streamer(f"Analyzing relation {tracker.current}/{tracker.total} of {document_progress} : {tracker.progress}")
+            writer(f"Analyzing relation {tracker.current}/{tracker.total} of {document_progress} : {tracker.progress}")
             try:
                 processor.load_content(content)
                 message = Message()
@@ -195,14 +195,14 @@ async def Relation_Analyze(state: ParserState, streamer: StreamWriter) -> Parser
                 processor.link_sequence()
                 processor.link_hierarchy()
             except Exception as e:
-                streamer(f"Failed to analyze relation {tracker.current}/{tracker.total} of {document_progress} : {e}")
+                writer(f"Failed to analyze relation {tracker.current}/{tracker.total} of {document_progress} : {e}")
                 continue
         processor.save_nodes()
         processor.save_relationships()
     client.sleep()
     return ParserState(mode = state.mode, documents = state.documents)
 
-async def Vector_Embedding(state: ParserState, streamer: StreamWriter) -> ParserState:
+async def Vector_Embedding(state: ParserState, writer: StreamWriter) -> ParserState:
     client = ChatEmbedder(
         model_name = MODEL.embedding_model,
         dimension = 128,
@@ -219,7 +219,7 @@ async def Vector_Embedding(state: ParserState, streamer: StreamWriter) -> Parser
         document_progress = f"document {index + 1} of {len(state.documents)}"
         for batch_index in range(1, len(processor.page_nodes), client.batch_size):
             tracker.update(batch_index, len(processor.page_nodes) - 1)
-            streamer(f"Embedding page {tracker.current}/{tracker.total} of {document_progress} : {tracker.progress}")
+            writer(f"Embedding page {tracker.current}/{tracker.total} of {document_progress} : {tracker.progress}")
             try:
                 batch_image = processor.load_pages(batch_index, batch_index + client.batch_size)
                 batch_vector = await asyncio.to_thread(client.encode_image, batch_image)
@@ -227,13 +227,13 @@ async def Vector_Embedding(state: ParserState, streamer: StreamWriter) -> Parser
                     page_id = batch_index + page_index
                     processor.embed_page(page_id, batch_vector[page_index])
             except Exception as e:
-                streamer(f"Failed to embed page {tracker.current}/{tracker.total} of {document_progress} : {e}")
+                writer(f"Failed to embed page {tracker.current}/{tracker.total} of {document_progress} : {e}")
                 continue
         
         tracker.reset()
         for batch_index in range(0, len(processor.nodes), client.batch_size):
             tracker.update(batch_index + 1, len(processor.nodes))
-            streamer(f"Embedding content {tracker.current}/{tracker.total} of {document_progress} : {tracker.progress}")
+            writer(f"Embedding content {tracker.current}/{tracker.total} of {document_progress} : {tracker.progress}")
             try:
                 batch_text = processor.load_text(batch_index, client.batch_size)
                 batch_image = processor.load_image(batch_index, client.batch_size)
@@ -243,13 +243,13 @@ async def Vector_Embedding(state: ParserState, streamer: StreamWriter) -> Parser
                     content_id = batch_index + content_index
                     processor.embed_content(content_id, batch_text_vector[content_index], batch_image_vector[content_index])
             except Exception as e:
-                streamer(f"Failed to embed content {tracker.current}/{tracker.total} of {document_progress} : {e}")
+                writer(f"Failed to embed content {tracker.current}/{tracker.total} of {document_progress} : {e}")
                 continue
         processor.save_nodes()
     client.close()
     return ParserState(mode = state.mode, documents = state.documents)
 
-async def Database_Storage(state: ParserState, streamer: StreamWriter) -> ParserState:
+async def Database_Storage(state: ParserState, writer: StreamWriter) -> ParserState:
     database = ChatNeo4j()
     for document in state.documents:
         processor = DatabaseProcessor(document)
@@ -257,14 +257,14 @@ async def Database_Storage(state: ParserState, streamer: StreamWriter) -> Parser
         processor.load_nodes()
         processor.load_relationships()
 
-        streamer(f"Storing database of {document.id}...")
+        writer(f"Storing database of {document.id}...")
         try:
             await database.write_graph(
                 nodes = processor.page_nodes + processor.nodes,
                 relationships = processor.relationships,
             )
         except Exception as e:
-            streamer(f"Failed to store database of {document.id} : {e}")
+            writer(f"Failed to store database of {document.id} : {e}")
             continue
     database.close()
     return ParserState(mode = state.mode, documents = state.documents)
