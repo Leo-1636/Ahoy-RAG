@@ -5,11 +5,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 def open_image(source_path: Path) -> Image.Image:
-<<<<<<< HEAD:back-end/utils/image_io.py
-    return Image.open(source_path)
-=======
     return Image.open(str(source_path)).convert("RGB")
->>>>>>> 33ff4f4d2a054c99c2a9203335bb290e143cdebd:back-end/utils/image_util.py
 
 def open_base64(base64_string: str) -> Image.Image:
     return open_image(BytesIO(base64.b64decode(base64_string)))

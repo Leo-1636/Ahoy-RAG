@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 import uvicorn
 
 from fastapi import FastAPI, File, UploadFile, HTTPException
@@ -59,65 +58,3 @@ async def parse(state: ParserState):
 
 if __name__ == "__main__":
     uvicorn.run(app, host = "0.0.0.0", port = 4000)
-=======
-from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import JSONResponse
-
-from config.config import path
-from config.state import ParserInput
-from utils import system_util
-from agents.parser import parser_agent
-
-app = FastAPI(title="Ahoy RAG API")
-
-UPLOADS = path.uploads
-system_util.make_directory(UPLOADS)
-
-
-def _get_document_id() -> str:
-    return system_util.get_uuid()
-
-@app.post("/upload")
-async def upload_pdf(
-    file: UploadFile = File(..., description="PDF 檔案"),
-    creator: str = "api",
-):
-    if not file.filename or not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="請上傳 PDF 檔案")
-
-    document_id = _get_document_id()
-    dest = UPLOADS / f"{document_id}.pdf"
-
-    try:
-        content = await file.read()
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"讀取檔案失敗: {e}")
-
-    try:
-        dest.write_bytes(content)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"儲存檔案失敗: {e}")
-
-    try:
-        await parser_agent.ainvoke(ParserInput(document_ids=[document_id], creator=creator))
-
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=500,
-            detail=f"執行提取失敗: {e}",
-        )
-
-    return JSONResponse(
-        status_code=200,
-        content = {
-            "document_id": document_id,
-            "message": "PDF 已上傳並完成提取",
-        },
-    )
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=5000)
->>>>>>> 33ff4f4d2a054c99c2a9203335bb290e143cdebd

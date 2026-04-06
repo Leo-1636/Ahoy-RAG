@@ -38,32 +38,6 @@ class ReadingOrderAlgorithm:
                 merged_elements.append(element)
         self.elements = merged_elements
 
-<<<<<<< HEAD
-=======
-    def group_by_gap(self, elements: list, axis: int) -> list[float]:
-        axis_intervals = sorted(
-            ((element[axis], element[axis + 2]) for element in elements),
-            key = lambda interval: interval[0],
-        )
-        cut_points = []
-        end_point = axis_intervals[0][1]
-        for start, end in axis_intervals[1:]:
-            if start - end_point >= pixel_gap:
-                cut_points.append((end_point + start) / 2)
-            end_point = max(end_point, end)
-        if not cut_points:
-            return [elements]
-
-        groups = []
-        interval_bounds = [float("-inf")] + cut_points + [float("inf")]
-        for i in range(len(interval_bounds) - 1):
-            group_range = interval_bounds[i], interval_bounds[i + 1]
-            group = [element for element in elements if group_range[0] <= (element[axis] + element[axis + 2]) / 2 < group_range[1]]
-            if group:
-                groups.append(group)
-        return groups
-
->>>>>>> 33ff4f4d2a054c99c2a9203335bb290e143cdebd
     def global_grouping(self, elements: list) -> list:
         x_groups = self.group_by_gap(elements, 0)
         if len(x_groups) > 1:
